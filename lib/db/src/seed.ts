@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import bcrypt from "bcryptjs";
-import { utilizadoresTable, motoristasTable, entregasTable } from "./schema/index.ts";
+import { utilizadoresTable, motoristasTable, entregasTable } from "./schema/index";
 
 const { Pool } = pg;
 
