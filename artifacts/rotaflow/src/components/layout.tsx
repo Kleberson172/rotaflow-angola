@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, ReactNode } from "react";
+import { useState, useRef, useEffect, useCallback, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Notificacao } from "@/lib/api";
 import {
   LayoutDashboard, Package, Users, BarChart3, Settings, Truck,
-  LogOut, Menu, X, Bell, Route, Navigation, CheckCheck, Trash2,
+  LogOut, Menu, X, Bell, BellRing, Route, Navigation, CheckCheck, Trash2,
   Info, CheckCircle2, AlertTriangle, Zap, Package2, Map, History,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -40,6 +40,65 @@ const destinatarioConfig: Record<string, { label: string; color: string; bg: str
   motorista: { label: "Motorista", color: "hsl(142 76% 30%)", bg: "hsl(142 76% 95%)" },
 };
 
+// ── Toast notification ────────────────────────────────────────────────────────
+interface ToastData {
+  id: string;
+  titulo: string;
+  mensagem: string;
+  tipo: string;
+}
+
+function ToastItem({ toast, onDismiss }: { toast: ToastData; onDismiss: () => void }) {
+  const cfg = tipoConfig[toast.tipo] ?? tipoConfig.info;
+  const Icon = cfg.icon;
+
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 64, scale: 0.95 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 64, scale: 0.95 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="flex items-start gap-3 bg-white rounded-xl shadow-xl border p-4 max-w-sm w-full"
+      style={{ borderColor: cfg.color + "40", borderLeftWidth: 4, borderLeftColor: cfg.color }}
+    >
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ background: cfg.bg }}>
+        <Icon className="w-4 h-4" style={{ color: cfg.color }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold" style={{ color: "hsl(222.2 84% 4.9%)" }}>{toast.titulo}</div>
+        <div className="text-xs mt-0.5 leading-relaxed line-clamp-2" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>
+          {toast.mensagem}
+        </div>
+      </div>
+      <button onClick={onDismiss} className="p-0.5 rounded hover:bg-slate-100 flex-shrink-0 mt-0.5"
+        style={{ color: "hsl(215.4 16.3% 60%)" }}>
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </motion.div>
+  );
+}
+
+function ToastContainer({ toasts, onDismiss }: { toasts: ToastData[]; onDismiss: (id: string) => void }) {
+  return (
+    <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-3 pointer-events-none">
+      <AnimatePresence>
+        {toasts.map((t) => (
+          <div key={t.id} className="pointer-events-auto">
+            <ToastItem toast={t} onDismiss={() => onDismiss(t.id)} />
+          </div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Notification Panel ────────────────────────────────────────────────────────
 function NotificationPanel({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const { data: notificacoes = [], isLoading } = useQuery({
@@ -132,7 +191,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="text-xs font-semibold" style={{ color: "hsl(222.2 84% 4.9%)" }}>{n.titulo}</div>
                   {!n.lida && (
-                    <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1" style={{ background: "hsl(221 83% 53%)" }} />
+                    <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1 animate-pulse" style={{ background: "hsl(221 83% 53%)" }} />
                   )}
                 </div>
                 <div className="text-xs mt-0.5 leading-relaxed" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>{n.mensagem}</div>
@@ -165,6 +224,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Sidebar ───────────────────────────────────────────────────────────────────
 function Sidebar({ onClose }: { onClose?: () => void }) {
   const [location] = useLocation();
   const { logout, user, isEntregador } = useAuth();
@@ -254,19 +314,83 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
   );
 }
 
+// ── Layout ────────────────────────────────────────────────────────────────────
 export default function Layout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    typeof Notification !== "undefined" ? Notification.permission : "default"
+  );
+  const [bellRinging, setBellRinging] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef<number | null>(null);
   const qc = useQueryClient();
 
   const { data: countData } = useQuery({
     queryKey: ["notificacoes-count"],
     queryFn: api.notificacoes.naoLidas,
-    refetchInterval: 15000,
+    refetchInterval: 8000,
   });
 
   const naoLidas = countData?.count ?? 0;
+
+  const addToast = useCallback((notif: { titulo: string; mensagem: string; tipo: string }) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev.slice(-3), { id, ...notif }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const showBrowserNotif = useCallback((titulo: string, mensagem: string) => {
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission === "granted") {
+      try {
+        new Notification(`RotaFlow — ${titulo}`, {
+          body: mensagem,
+          icon: "/favicon.ico",
+          tag: "rotaflow-notif",
+        });
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  const requestNotifPermission = useCallback(async () => {
+    if (typeof Notification === "undefined") return;
+    const permission = await Notification.requestPermission();
+    setNotifPermission(permission);
+    if (permission === "granted") {
+      addToast({ titulo: "Notificações activadas!", mensagem: "Será alertado em tempo real de todas as actualizações.", tipo: "sucesso" });
+      showBrowserNotif("Bem-vindo!", "As notificações push estão activas para a RotaFlow Angola.");
+    }
+  }, [addToast, showBrowserNotif]);
+
+  // Detect new notifications
+  useEffect(() => {
+    if (prevCountRef.current === null) {
+      prevCountRef.current = naoLidas;
+      return;
+    }
+    if (naoLidas > prevCountRef.current) {
+      const novas = naoLidas - prevCountRef.current;
+      setBellRinging(true);
+      setTimeout(() => setBellRinging(false), 2000);
+      addToast({
+        titulo: novas === 1 ? "Nova notificação" : `${novas} novas notificações`,
+        mensagem: "Clique no sino para ver os detalhes.",
+        tipo: "info",
+      });
+      showBrowserNotif(
+        novas === 1 ? "Nova notificação" : `${novas} novas notificações`,
+        "Atualizações de entregas disponíveis."
+      );
+    }
+    prevCountRef.current = naoLidas;
+  }, [naoLidas, addToast, showBrowserNotif]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -309,6 +433,24 @@ export default function Layout({ children }: { children: ReactNode }) {
             <GlobalSearch />
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Enable browser notifications button */}
+            {notifPermission !== "granted" && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                onClick={requestNotifPermission}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all hover:shadow-sm"
+                style={{
+                  background: "hsl(221 83% 95%)",
+                  color: "hsl(221 83% 45%)",
+                  borderColor: "hsl(221 83% 80%)",
+                }}
+              >
+                <BellRing className="w-3.5 h-3.5" />
+                Activar Alertas
+              </motion.button>
+            )}
+
             <div ref={notifRef} className="relative">
               <button
                 data-testid="button-notifications"
@@ -318,15 +460,25 @@ export default function Layout({ children }: { children: ReactNode }) {
                 }}
                 className="p-2 rounded-lg hover:bg-gray-100 transition-colors relative"
               >
-                <Bell className="w-5 h-5" style={{ color: "hsl(215.4 16.3% 46.9%)" }} />
-                {naoLidas > 0 && (
-                  <motion.span
-                    initial={{ scale: 0 }} animate={{ scale: 1 }}
-                    className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-white text-[10px] font-bold px-1"
-                    style={{ background: "hsl(0 84.2% 55%)" }}>
-                    {naoLidas > 99 ? "99+" : naoLidas}
-                  </motion.span>
-                )}
+                <motion.div
+                  animate={bellRinging ? { rotate: [0, -15, 15, -10, 10, -5, 5, 0] } : { rotate: 0 }}
+                  transition={{ duration: 0.6, ease: "easeInOut" }}
+                >
+                  <Bell className="w-5 h-5" style={{ color: naoLidas > 0 ? "hsl(221 83% 53%)" : "hsl(215.4 16.3% 46.9%)" }} />
+                </motion.div>
+                <AnimatePresence>
+                  {naoLidas > 0 && (
+                    <motion.span
+                      key={naoLidas}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-white text-[10px] font-bold px-1"
+                      style={{ background: "hsl(0 84.2% 55%)" }}>
+                      {naoLidas > 99 ? "99+" : naoLidas}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </button>
               <AnimatePresence>
                 {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} />}
@@ -339,6 +491,9 @@ export default function Layout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Toast container */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

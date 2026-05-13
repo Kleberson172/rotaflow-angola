@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Truck, Navigation, Clock, Users, CheckCircle2, AlertCircle, Loader2, Phone, MapPin, Package, RefreshCw } from "lucide-react";
+import {
+  Truck, Navigation, Clock, Users, CheckCircle2, AlertCircle,
+  Loader2, Phone, MapPin, Package, RefreshCw, Radio,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+const REFRESH_INTERVAL = 10000; // 10 seconds
 
 interface MotoristaMapaInfo {
   id: number;
@@ -48,23 +53,16 @@ function StatCard({ icon: Icon, label, value, color }: { icon: typeof Truck; lab
   );
 }
 
-function MotoristaCard({
-  m, selected, onClick,
-}: { m: MotoristaMapaInfo; selected: boolean; onClick: () => void }) {
+function MotoristaCard({ m, selected, onClick }: { m: MotoristaMapaInfo; selected: boolean; onClick: () => void }) {
   const cfg = ESTADO_CFG[m.estado];
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      onClick={onClick}
-      data-testid={`card-motorista-${m.id}`}
+    <motion.div layout initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+      onClick={onClick} data-testid={`card-motorista-${m.id}`}
       className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all"
       style={{
         borderColor: selected ? "hsl(221 83% 53%)" : "hsl(214.3 31.8% 91.4%)",
         background: selected ? "hsl(221 83% 53% / 0.05)" : "white",
-      }}
-    >
+      }}>
       <div className="relative flex-shrink-0">
         <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold"
           style={{ background: cfg.color }}>
@@ -85,9 +83,9 @@ function MotoristaCard({
           )}
         </div>
       </div>
-      <div className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0"
-        style={{ background: cfg.bg, color: cfg.color }}>
-        {m.veiculo}
+      <div className="text-xs font-medium flex-shrink-0 max-w-[80px] truncate text-right"
+        style={{ color: "hsl(215.4 16.3% 46.9%)" }}>
+        {m.veiculo.split("—")[0].trim()}
       </div>
     </motion.div>
   );
@@ -96,13 +94,8 @@ function MotoristaCard({
 function MotoristaDetail({ m, onClose }: { m: MotoristaMapaInfo; onClose: () => void }) {
   const cfg = ESTADO_CFG[m.estado];
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 12 }}
-      className="bg-white rounded-2xl border shadow-lg overflow-hidden"
-      style={{ borderColor: "hsl(214.3 31.8% 91.4%)" }}
-    >
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
+      className="bg-white rounded-2xl border shadow-lg overflow-hidden" style={{ borderColor: "hsl(214.3 31.8% 91.4%)" }}>
       <div className="p-4 border-b" style={{ borderColor: "hsl(214.3 31.8% 91.4%)", background: `${cfg.color}08` }}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
@@ -119,7 +112,8 @@ function MotoristaDetail({ m, onClose }: { m: MotoristaMapaInfo; onClose: () => 
             style={{ color: "hsl(215.4 16.3% 46.9%)" }}>✕</button>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full" style={{ background: cfg.dot }} />
+          {cfg.pulse && <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: cfg.dot }} />}
+          {!cfg.pulse && <span className="w-2 h-2 rounded-full" style={{ background: cfg.dot }} />}
           <span className="text-sm font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
         </div>
       </div>
@@ -171,6 +165,31 @@ function MotoristaDetail({ m, onClose }: { m: MotoristaMapaInfo; onClose: () => 
   );
 }
 
+// Live countdown ring
+function LiveCountdown({ total, elapsed }: { total: number; elapsed: number }) {
+  const pct = Math.max(0, 1 - elapsed / total);
+  const r = 10;
+  const circ = 2 * Math.PI * r;
+  const dashOffset = circ * (1 - pct);
+  const sec = Math.max(0, Math.ceil((total - elapsed) / 1000));
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative w-7 h-7">
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r={r} fill="none" stroke="hsl(214.3 31.8% 91.4%)" strokeWidth="2.5" />
+          <circle cx="12" cy="12" r={r} fill="none" stroke="hsl(142 76% 42%)" strokeWidth="2.5"
+            strokeDasharray={circ} strokeDashoffset={dashOffset}
+            style={{ transition: "stroke-dashoffset 0.5s linear" }} />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold"
+          style={{ color: "hsl(142 76% 35%)" }}>{sec}</span>
+      </div>
+      <span className="text-xs font-medium" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>próx. actualização</span>
+    </div>
+  );
+}
+
 export default function Mapa() {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<any>(null);
@@ -178,14 +197,24 @@ export default function Mapa() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [filtro, setFiltro] = useState<"todos" | "em_rota" | "disponivel" | "inactivo">("todos");
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [elapsed, setElapsed] = useState(0);
 
-  const { data: motoristas = [], isLoading, refetch } = useQuery<MotoristaMapaInfo[]>({
+  const { data: motoristas = [], isLoading, refetch, isFetching } = useQuery<MotoristaMapaInfo[]>({
     queryKey: ["mapa-motoristas"],
     queryFn: () => fetch("/api/mapa/motoristas", {
       headers: { Authorization: `Bearer ${localStorage.getItem("rf_token")}` },
     }).then((r) => r.json()),
-    refetchInterval: 20000,
+    refetchInterval: REFRESH_INTERVAL,
   });
+
+  // Elapsed timer for the countdown ring
+  useEffect(() => {
+    setElapsed(0);
+    const interval = setInterval(() => {
+      setElapsed((e) => Math.min(e + 500, REFRESH_INTERVAL));
+    }, 500);
+    return () => clearInterval(interval);
+  }, [lastRefresh]);
 
   const selectedMotorista = motoristas.find((m) => m.id === selectedId) ?? null;
   const filtered = filtro === "todos" ? motoristas : motoristas.filter((m) => m.estado === filtro);
@@ -200,7 +229,6 @@ export default function Mapa() {
     if (!mapRef.current || leafletMapRef.current) return;
 
     import("leaflet").then((L) => {
-      // Fix default marker icons
       delete (L.Icon.Default.prototype as any)._getIconUrl;
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -215,13 +243,8 @@ export default function Mapa() {
         attributionControl: false,
       });
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-      }).addTo(map);
-
-      // Compact attribution
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
       L.control.attribution({ prefix: "© OSM" }).addTo(map);
-
       leafletMapRef.current = map;
     });
 
@@ -235,6 +258,7 @@ export default function Mapa() {
   useEffect(() => {
     if (!leafletMapRef.current || !motoristas.length) return;
     setLastRefresh(new Date());
+    setElapsed(0);
 
     import("leaflet").then((L) => {
       const map = leafletMapRef.current;
@@ -244,21 +268,24 @@ export default function Mapa() {
 
         const icon = L.divIcon({
           className: "",
-          iconSize: [36, 36],
-          iconAnchor: [18, 36],
-          popupAnchor: [0, -36],
+          iconSize: [38, 38],
+          iconAnchor: [19, 38],
+          popupAnchor: [0, -38],
           html: `
-            <div style="
-              width:36px;height:36px;border-radius:50% 50% 50% 0;
-              background:${cfg.color};transform:rotate(-45deg);
-              border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);
-              display:flex;align-items:center;justify-content:center;
-            ">
-              <span style="transform:rotate(45deg);color:white;font-size:13px;font-weight:700;line-height:1">
-                ${m.nome.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
-              </span>
+            <div style="position:relative;width:38px;height:38px;">
+              ${cfg.pulse ? `<div style="position:absolute;inset:0;border-radius:50%;background:${cfg.color};opacity:0.25;animation:ping 1.8s cubic-bezier(0,0,0.2,1) infinite;"></div>` : ""}
+              <div style="
+                position:absolute;inset:3px;
+                border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+                background:${cfg.color};
+                border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.28);
+                display:flex;align-items:center;justify-content:center;
+              ">
+                <span style="transform:rotate(45deg);color:white;font-size:12px;font-weight:800;letter-spacing:-0.5px;line-height:1">
+                  ${m.nome.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
+                </span>
+              </div>
             </div>
-            ${cfg.pulse ? `<div style="position:absolute;top:0;left:0;width:36px;height:36px;border-radius:50%;background:${cfg.color};opacity:0.3;animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>` : ""}
           `,
         });
 
@@ -266,24 +293,21 @@ export default function Mapa() {
           markersRef.current[m.id].setLatLng([m.lat, m.lng]).setIcon(icon);
         } else {
           const marker = L.marker([m.lat, m.lng], { icon });
-
           marker.bindTooltip(
             `<div style="font-family:sans-serif;min-width:160px;">
-              <div style="font-weight:600;font-size:13px;margin-bottom:2px;">${m.nome}</div>
+              <div style="font-weight:700;font-size:13px;margin-bottom:2px;">${m.nome}</div>
               <div style="font-size:11px;color:#64748b;">${m.veiculo} · ${m.zona}</div>
-              <div style="font-size:11px;color:${cfg.color};margin-top:4px;font-weight:500;">${cfg.label}</div>
+              <div style="font-size:11px;color:${cfg.color};margin-top:4px;font-weight:600;">${cfg.label}</div>
               ${m.entregaAtual ? `<div style="font-size:11px;color:#334155;margin-top:2px;">→ ${m.entregaAtual.destinatario}</div>` : ""}
             </div>`,
             { permanent: false, direction: "top", className: "custom-tooltip" }
           );
-
           marker.on("click", () => setSelectedId(m.id));
           marker.addTo(map);
           markersRef.current[m.id] = marker;
         }
       });
 
-      // Remove markers for deleted motoristas
       Object.keys(markersRef.current).forEach((idStr) => {
         const id = Number(idStr);
         if (!motoristas.find((m) => m.id === id)) {
@@ -301,18 +325,16 @@ export default function Mapa() {
     markersRef.current[selectedMotorista.id]?.openTooltip();
   }, [selectedMotorista]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     refetch();
-  };
+    setElapsed(0);
+  }, [refetch]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
-      {/* Inject leaflet CSS and ping animation */}
       <style>{`
         @import url("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
-        @keyframes ping {
-          75%, 100% { transform: scale(2); opacity: 0; }
-        }
+        @keyframes ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
         .custom-tooltip {
           border-radius: 10px !important;
           border: 1px solid hsl(214.3 31.8% 91.4%) !important;
@@ -326,19 +348,30 @@ export default function Mapa() {
 
       {/* Top stats bar */}
       <div className="flex-shrink-0 px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "hsl(222.2 84% 4.9%)" }}>Mapa em Tempo Real</h1>
+            <h1 className="text-2xl font-bold flex items-center gap-2.5" style={{ color: "hsl(222.2 84% 4.9%)" }}>
+              Mapa em Tempo Real
+              {/* LIVE badge */}
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
+                style={{ background: "hsl(142 76% 95%)", color: "hsl(142 76% 30%)" }}>
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "hsl(142 76% 42%)" }} />
+                AO VIVO
+              </span>
+            </h1>
             <p className="text-sm mt-0.5" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>
-              Luanda · Actualizado {lastRefresh.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              Luanda · Última actualização: {lastRefresh.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </p>
           </div>
-          <button onClick={handleRefresh}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium hover:bg-slate-50 transition-colors"
-            style={{ borderColor: "hsl(214.3 31.8% 91.4%)", color: "hsl(215.4 16.3% 46.9%)" }}>
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-            Actualizar
-          </button>
+          <div className="flex items-center gap-3">
+            <LiveCountdown total={REFRESH_INTERVAL} elapsed={elapsed} />
+            <button onClick={handleRefresh}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium hover:bg-slate-50 transition-colors"
+              style={{ borderColor: "hsl(214.3 31.8% 91.4%)", color: "hsl(215.4 16.3% 46.9%)" }}>
+              <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
+              Actualizar
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-4 gap-3">
           <StatCard icon={Truck} label="Em Rota" value={emRota} color="#2563eb" />
@@ -348,12 +381,13 @@ export default function Mapa() {
         </div>
       </div>
 
-      {/* Main content: map + sidebar */}
+      {/* Main content: sidebar + map */}
       <div className="flex flex-1 gap-0 px-6 pb-6 overflow-hidden">
         {/* Sidebar */}
         <div className="w-72 flex-shrink-0 flex flex-col gap-3 pr-4 overflow-hidden">
           {/* Filter tabs */}
-          <div className="flex gap-1 p-1 rounded-xl flex-shrink-0" style={{ background: "hsl(210 40% 98%)", border: "1px solid hsl(214.3 31.8% 91.4%)" }}>
+          <div className="flex gap-1 p-1 rounded-xl flex-shrink-0"
+            style={{ background: "hsl(210 40% 98%)", border: "1px solid hsl(214.3 31.8% 91.4%)" }}>
             {(["todos", "em_rota", "disponivel", "inactivo"] as const).map((f) => (
               <button key={f} onClick={() => setFiltro(f)}
                 className="flex-1 py-1.5 text-xs font-medium rounded-lg transition-all"
@@ -365,7 +399,7 @@ export default function Mapa() {
             ))}
           </div>
 
-          {/* List */}
+          {/* Driver list */}
           <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
@@ -385,7 +419,7 @@ export default function Mapa() {
             )}
           </div>
 
-          {/* Detail panel */}
+          {/* Selected driver detail */}
           <AnimatePresence>
             {selectedMotorista && (
               <MotoristaDetail m={selectedMotorista} onClose={() => setSelectedId(null)} />
@@ -393,7 +427,7 @@ export default function Mapa() {
           </AnimatePresence>
         </div>
 
-        {/* Map */}
+        {/* Map container */}
         <div className="flex-1 rounded-2xl overflow-hidden border relative" style={{ borderColor: "hsl(214.3 31.8% 91.4%)" }}>
           <div ref={mapRef} className="w-full h-full" />
 
@@ -407,6 +441,18 @@ export default function Mapa() {
                 <span className="text-xs" style={{ color: "hsl(222.2 84% 4.9%)" }}>{cfg.label}</span>
               </div>
             ))}
+          </div>
+
+          {/* Live signal badge on map */}
+          <div className="absolute top-4 left-4 z-[1000] flex items-center gap-2 bg-white rounded-xl border px-3 py-2 shadow-sm"
+            style={{ borderColor: "hsl(214.3 31.8% 91.4%)" }}>
+            <Radio className="w-4 h-4" style={{ color: "hsl(142 76% 42%)" }} />
+            <span className="text-xs font-semibold" style={{ color: "hsl(142 76% 35%)" }}>
+              {motoristas.length} motoristas · actualiza cada 10s
+            </span>
+            {isFetching && (
+              <Loader2 className="w-3 h-3 animate-spin" style={{ color: "hsl(221 83% 53%)" }} />
+            )}
           </div>
 
           {/* Loading overlay */}
