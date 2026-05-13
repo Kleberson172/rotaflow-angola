@@ -13,6 +13,7 @@ import Relatorios from "@/pages/relatorios";
 import Configuracoes from "@/pages/configuracoes";
 import Otimizador from "@/pages/otimizador";
 import Mapa from "@/pages/mapa";
+import HistoricoRotas from "@/pages/historico-rotas";
 import Layout from "@/components/layout";
 import { useEffect } from "react";
 
@@ -88,6 +89,9 @@ function Router() {
       </Route>
       <Route path="/mapa">
         {() => <ProtectedRoute component={Mapa} adminOnly />}
+      </Route>
+      <Route path="/historico-rotas">
+        {() => <ProtectedRoute component={HistoricoRotas} adminOnly />}
       </Route>
       <Route component={NotFound} />
     </Switch>

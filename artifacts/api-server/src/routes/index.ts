@@ -8,6 +8,7 @@ import notificacoesRouter from "./notificacoes";
 import utilizadoresRouter from "./utilizadores";
 import mapaRouter from "./mapa";
 import searchRouter from "./search";
+import historicoRotasRouter from "./historicoRotas";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(notificacoesRouter);
 router.use(utilizadoresRouter);
 router.use(mapaRouter);
 router.use(searchRouter);
+router.use(historicoRotasRouter);
 
 export default router;

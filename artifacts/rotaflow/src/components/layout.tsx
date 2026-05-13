@@ -6,7 +6,7 @@ import { api, type Notificacao } from "@/lib/api";
 import {
   LayoutDashboard, Package, Users, BarChart3, Settings, Truck,
   LogOut, Menu, X, Bell, Route, Navigation, CheckCheck, Trash2,
-  Info, CheckCircle2, AlertTriangle, Zap, Package2, Map,
+  Info, CheckCircle2, AlertTriangle, Zap, Package2, Map, History,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import GlobalSearch from "./global-search";
@@ -17,6 +17,7 @@ const adminNavItems = [
   { href: "/motoristas", icon: Users, label: "Motoristas" },
   { href: "/otimizador", icon: Route, label: "Optimizador" },
   { href: "/mapa", icon: Map, label: "Mapa ao Vivo" },
+  { href: "/historico-rotas", icon: History, label: "Histórico Rotas" },
   { href: "/relatorios", icon: BarChart3, label: "Relatórios" },
   { href: "/configuracoes", icon: Settings, label: "Configurações" },
 ];

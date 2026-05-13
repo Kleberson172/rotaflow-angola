@@ -260,6 +260,11 @@ export default function Otimizador() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["entregas"] }),
   });
 
+  const historicoMutation = useMutation({
+    mutationFn: api.historicoRotas.create,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["historico-rotas"] }),
+  });
+
   const driverDeliveries = entregas.filter(
     (e) => e.motorista === motoristaSel && (e.estado === "Pendente" || e.estado === "Em Rota")
   );
@@ -318,6 +323,37 @@ export default function Otimizador() {
     const pending = driverDeliveries.filter((e) => e.estado === "Pendente");
     await Promise.all(pending.map((e) => updateMutation.mutateAsync({ id: e.id, estado: "Em Rota" })));
     setStarted(true);
+
+    // Save route history
+    if (optimized && motoristaSel) {
+      const optDist = optimized.reduce((sum, e, i) => {
+        const from: [number, number] = i === 0 ? DEPOT : [optimized[i - 1].lat, optimized[i - 1].lng];
+        return sum + haversine(from, [e.lat, e.lng]);
+      }, 0);
+      const kmOtimizado = optDist;
+      const kmSemOpt = Math.max(unoptimizedDist, kmOtimizado);
+      const kmPoupados = Math.max(0, kmSemOpt - kmOtimizado);
+      const litrosGastos = kmOtimizado * FUEL_L_PER_KM;
+      const kzGastos = litrosGastos * FUEL_PRICE_KZ;
+      const litrosPoupados = kmPoupados * FUEL_L_PER_KM;
+      const kzPoupados = litrosPoupados * FUEL_PRICE_KZ;
+      const percentagemPoupanca = kmSemOpt > 0 ? (kmPoupados / kmSemOpt) * 100 : 0;
+
+      historicoMutation.mutate({
+        motorista: motoristaSel,
+        kmTotal: parseFloat(kmOtimizado.toFixed(2)),
+        kmSemOtimizacao: parseFloat(kmSemOpt.toFixed(2)),
+        kmPoupados: parseFloat(kmPoupados.toFixed(2)),
+        litrosGastos: parseFloat(litrosGastos.toFixed(3)),
+        kzGastos: parseFloat(kzGastos.toFixed(2)),
+        litrosPoupados: parseFloat(litrosPoupados.toFixed(3)),
+        kzPoupados: parseFloat(kzPoupados.toFixed(2)),
+        percentagemPoupanca: parseFloat(percentagemPoupanca.toFixed(2)),
+        numParagens: optimized.length,
+        modoTrafico: trafficMode,
+        paragemIds: optimized.map((e) => e.id),
+      });
+    }
   };
 
   const handleComplete = async (entrega: Entrega) => {

@@ -72,6 +72,15 @@ export const api = {
     stats: () => request<RelatoriosStats>("/relatorios/stats"),
   },
 
+  historicoRotas: {
+    list: (motorista?: string) =>
+      request<HistoricoRota[]>(`/historico-rotas${motorista ? `?motorista=${encodeURIComponent(motorista)}` : ""}`),
+    create: (data: CreateHistoricoRotaInput) =>
+      request<HistoricoRota>("/historico-rotas", { method: "POST", body: JSON.stringify(data) }),
+    delete: (id: number) =>
+      request<{ success: boolean }>(`/historico-rotas/${id}`, { method: "DELETE" }),
+  },
+
   notificacoes: {
     list: () => request<Notificacao[]>("/notificacoes"),
     naoLidas: () => request<{ count: number }>("/notificacoes/nao-lidas"),
@@ -164,6 +173,38 @@ export interface Notificacao {
   entregaId: number | null;
   lida: boolean;
   criadoEm: string;
+}
+
+export interface HistoricoRota {
+  id: number;
+  motorista: string;
+  kmTotal: number;
+  kmSemOtimizacao: number;
+  kmPoupados: number;
+  litrosGastos: number;
+  kzGastos: number;
+  litrosPoupados: number;
+  kzPoupados: number;
+  percentagemPoupanca: number;
+  numParagens: number;
+  modoTrafico: string;
+  paragemIds: number[];
+  criadoEm: string;
+}
+
+export interface CreateHistoricoRotaInput {
+  motorista: string;
+  kmTotal: number;
+  kmSemOtimizacao: number;
+  kmPoupados: number;
+  litrosGastos: number;
+  kzGastos: number;
+  litrosPoupados: number;
+  kzPoupados: number;
+  percentagemPoupanca: number;
+  numParagens: number;
+  modoTrafico: string;
+  paragemIds: number[];
 }
 
 export interface CombustivelMotorista {
