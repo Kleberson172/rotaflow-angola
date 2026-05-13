@@ -437,9 +437,12 @@ export default function Otimizador() {
               <ArrowRight className="w-3 h-3" />Rota alternativa activa
             </div>
           )}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: "hsl(38 92% 95%)", color: "hsl(38 92% 35%)" }}>
+            <Fuel className="w-3.5 h-3.5" />Custo: {(optDist * FUEL_L_PER_KM).toFixed(1)}L (~{Math.round(optDist * FUEL_L_PER_KM * FUEL_PRICE_KZ).toLocaleString("pt-PT")} Kz)
+          </div>
           {savedDist > 0.1 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: "hsl(270 76% 95%)", color: "hsl(270 76% 40%)" }}>
-              <Fuel className="w-3.5 h-3.5" />Poupança: {savedFuelL.toFixed(1)}L (~{Math.round(savedKz)} Kz)
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: "hsl(142 76% 95%)", color: "hsl(142 76% 30%)" }}>
+              <TrendingDown className="w-3.5 h-3.5" />Poupança: {savedFuelL.toFixed(1)}L (~{Math.round(savedKz).toLocaleString("pt-PT")} Kz)
             </div>
           )}
           {usingStraightLine && (

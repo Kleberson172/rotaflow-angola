@@ -10,8 +10,6 @@ router.use(authMiddleware);
 const FUEL_L_PER_KM = 0.065;
 const FUEL_PRICE_KZ = 200;
 const DEPOT: [number, number] = [-8.8383, 13.2344];
-const AVG_DIRECT_KM = 8.5;
-const OPTIMIZATION_SAVING_FACTOR = 0.22;
 
 function haversine(a: [number, number], b: [number, number]): number {
   const R = 6371;
@@ -23,6 +21,36 @@ function haversine(a: [number, number], b: [number, number]): number {
       Math.cos((b[0] * Math.PI) / 180) *
       Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.asin(Math.sqrt(h));
+}
+
+function sequentialDistance(depot: [number, number], stops: [number, number][]): number {
+  if (stops.length === 0) return 0;
+  let total = 0;
+  let current = depot;
+  for (const stop of stops) {
+    total += haversine(current, stop);
+    current = stop;
+  }
+  return total;
+}
+
+function optimizedDistance(depot: [number, number], stops: [number, number][]): number {
+  if (stops.length === 0) return 0;
+  const remaining = [...stops];
+  let current = depot;
+  let total = 0;
+  while (remaining.length > 0) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    remaining.forEach((s, i) => {
+      const d = haversine(current, s);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    });
+    total += bestDist;
+    current = remaining[bestIdx];
+    remaining.splice(bestIdx, 1);
+  }
+  return total;
 }
 
 router.get("/relatorios/stats", async (_req, res) => {
@@ -116,29 +144,44 @@ router.get("/relatorios/stats", async (_req, res) => {
 
     const combustivelPorMotorista = motoristas.map((m) => {
       const entregasM = entregas.filter((e) => e.motorista === m.nome && e.estado === "Entregue");
-      const totalKm = entregasM.reduce((sum, e) => {
-        const distDepot = haversine(DEPOT, [e.lat, e.lng]);
-        return sum + distDepot;
-      }, 0);
-      const kmSemOtimizacao = totalKm * (1 + OPTIMIZATION_SAVING_FACTOR);
-      const kmPoupados = kmSemOtimizacao - totalKm;
+      if (entregasM.length === 0) return null;
+
+      const stops: [number, number][] = entregasM.map((e) => [e.lat, e.lng]);
+
+      // Sequential (unoptimized) distance — order as stored in DB
+      const kmSemOtimizacao = sequentialDistance(DEPOT, stops);
+      // Optimized distance — nearest neighbour TSP
+      const kmOtimizado = optimizedDistance(DEPOT, stops);
+
+      const kmPoupados = Math.max(0, kmSemOtimizacao - kmOtimizado);
+      const litrosGastos = kmOtimizado * FUEL_L_PER_KM;
+      const kzGastos = litrosGastos * FUEL_PRICE_KZ;
       const litrosPoupados = kmPoupados * FUEL_L_PER_KM;
       const kzPoupados = litrosPoupados * FUEL_PRICE_KZ;
-      const percentagemPoupanca = OPTIMIZATION_SAVING_FACTOR * 100;
+      const percentagemPoupanca = kmSemOtimizacao > 0
+        ? (kmPoupados / kmSemOtimizacao) * 100
+        : 0;
+
       return {
         nome: m.nome,
         entregasTotal: entregasM.length,
-        kmTotal: Math.round(totalKm * 10) / 10,
+        kmTotal: Math.round(kmOtimizado * 10) / 10,
+        kmSemOtimizacao: Math.round(kmSemOtimizacao * 10) / 10,
         kmPoupados: Math.round(kmPoupados * 10) / 10,
+        litrosGastos: Math.round(litrosGastos * 100) / 100,
+        kzGastos: Math.round(kzGastos),
         litrosPoupados: Math.round(litrosPoupados * 100) / 100,
         kzPoupados: Math.round(kzPoupados),
         percentagemPoupanca: Math.round(percentagemPoupanca * 10) / 10,
       };
-    }).filter((m) => m.entregasTotal > 0).sort((a, b) => b.kzPoupados - a.kzPoupados);
+    }).filter((m): m is NonNullable<typeof m> => m !== null)
+      .sort((a, b) => b.kzPoupados - a.kzPoupados);
 
     const totalKzPoupados = combustivelPorMotorista.reduce((s, m) => s + m.kzPoupados, 0);
     const totalLitrosPoupados = combustivelPorMotorista.reduce((s, m) => s + m.litrosPoupados, 0);
     const totalKmPoupados = combustivelPorMotorista.reduce((s, m) => s + m.kmPoupados, 0);
+    const totalLitrosGastos = combustivelPorMotorista.reduce((s, m) => s + m.litrosGastos, 0);
+    const totalKzGastos = combustivelPorMotorista.reduce((s, m) => s + m.kzGastos, 0);
 
     res.json({
       kpis: {
@@ -162,7 +205,11 @@ router.get("/relatorios/stats", async (_req, res) => {
         totalKzPoupados: Math.round(totalKzPoupados),
         totalLitrosPoupados: Math.round(totalLitrosPoupados * 100) / 100,
         totalKmPoupados: Math.round(totalKmPoupados * 10) / 10,
-        percentagemMedia: OPTIMIZATION_SAVING_FACTOR * 100,
+        totalLitrosGastos: Math.round(totalLitrosGastos * 100) / 100,
+        totalKzGastos: Math.round(totalKzGastos),
+        percentagemMedia: combustivelPorMotorista.length > 0
+          ? combustivelPorMotorista.reduce((s, m) => s + m.percentagemPoupanca, 0) / combustivelPorMotorista.length
+          : 0,
       },
     });
   } catch (err) {

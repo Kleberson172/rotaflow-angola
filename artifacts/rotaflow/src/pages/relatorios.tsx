@@ -357,29 +357,27 @@ export default function Relatorios() {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold" style={{ color: "hsl(222.2 84% 4.9%)" }}>{m.nome}</div>
                   <div className="text-xs mt-0.5" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>
-                    {m.entregasTotal} entregas · {m.kmTotal} km percorridos
+                    {m.entregasTotal} entregas · {m.kmTotal} km optimizados · {m.kmSemOtimizacao} km sem opt.
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="flex-1 h-1.5 rounded-full" style={{ background: "hsl(214.3 31.8% 91.4%)" }}>
-                      <div className="h-full rounded-full" style={{ width: `${m.percentagemPoupanca}%`, background: "hsl(142 76% 42%)" }} />
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(m.percentagemPoupanca, 100)}%`, background: "hsl(142 76% 42%)" }} />
                     </div>
-                    <span className="text-xs font-semibold w-10 text-right" style={{ color: "hsl(142 76% 30%)" }}>
-                      {m.percentagemPoupanca.toFixed(0)}%
+                    <span className="text-xs font-semibold w-12 text-right" style={{ color: "hsl(142 76% 30%)" }}>
+                      -{m.percentagemPoupanca.toFixed(0)}%
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-6 flex-shrink-0 flex-wrap">
-                  <div className="text-center min-w-[64px]">
-                    <div className="text-sm font-bold" style={{ color: "hsl(142 76% 30%)" }}>{m.kmPoupados} km</div>
-                    <div className="text-xs" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>km poupados</div>
+                <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
+                  <div className="text-center min-w-[80px] px-2 py-1.5 rounded-lg" style={{ background: "hsl(38 92% 97%)" }}>
+                    <div className="text-sm font-bold" style={{ color: "hsl(38 92% 35%)" }}>{m.litrosGastos.toFixed(1)}L</div>
+                    <div className="text-xs" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>litros gastos</div>
+                    <div className="text-xs font-semibold mt-0.5" style={{ color: "hsl(38 92% 35%)" }}>{m.kzGastos.toLocaleString("pt-PT")} Kz</div>
                   </div>
-                  <div className="text-center min-w-[64px]">
-                    <div className="text-sm font-bold" style={{ color: "hsl(38 92% 40%)" }}>{m.litrosPoupados.toFixed(1)}L</div>
+                  <div className="text-center min-w-[80px] px-2 py-1.5 rounded-lg" style={{ background: "hsl(142 76% 97%)" }}>
+                    <div className="text-sm font-bold" style={{ color: "hsl(142 76% 30%)" }}>{m.litrosPoupados.toFixed(1)}L</div>
                     <div className="text-xs" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>litros poupados</div>
-                  </div>
-                  <div className="text-center min-w-[80px]">
-                    <div className="text-sm font-bold" style={{ color: "hsl(221 83% 53%)" }}>{m.kzPoupados.toLocaleString("pt-PT")} Kz</div>
-                    <div className="text-xs" style={{ color: "hsl(215.4 16.3% 46.9%)" }}>economizados</div>
+                    <div className="text-xs font-semibold mt-0.5" style={{ color: "hsl(142 76% 30%)" }}>{m.kzPoupados.toLocaleString("pt-PT")} Kz</div>
                   </div>
                 </div>
               </motion.div>

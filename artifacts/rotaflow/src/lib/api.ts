@@ -170,7 +170,10 @@ export interface CombustivelMotorista {
   nome: string;
   entregasTotal: number;
   kmTotal: number;
+  kmSemOtimizacao: number;
   kmPoupados: number;
+  litrosGastos: number;
+  kzGastos: number;
   litrosPoupados: number;
   kzPoupados: number;
   percentagemPoupanca: number;
@@ -198,6 +201,8 @@ export interface RelatoriosStats {
     totalKzPoupados: number;
     totalLitrosPoupados: number;
     totalKmPoupados: number;
+    totalLitrosGastos: number;
+    totalKzGastos: number;
     percentagemMedia: number;
   };
 }

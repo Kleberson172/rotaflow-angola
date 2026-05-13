@@ -126,7 +126,7 @@ export async function exportRelatoriosPDF(stats: RelatoriosStats) {
       m.nome,
       m.total,
       `${m.taxa}%`,
-      m.taxa >= 95 ? "⭐ Excelente" : m.taxa >= 85 ? "✓ Bom" : "⚠ Melhorar",
+      m.taxa >= 95 ? "Excelente" : m.taxa >= 85 ? "Bom" : "Melhorar",
     ]),
     styles: { fontSize: 8.5, cellPadding: 3, textColor: DARK },
     headStyles: { fillColor: [226, 232, 240], textColor: DARK, fontStyle: "bold", fontSize: 8 },
@@ -195,39 +195,43 @@ export async function exportRelatoriosPDF(stats: RelatoriosStats) {
 
   autoTable(doc, {
     startY: y,
-    head: [["Motorista", "Entregas", "Km Total", "Km Poupados", "Litros Poupados", "Valor (Kz)", "Poupança %"]],
+    head: [["Motorista", "Ent.", "Km Opt.", "Km s/ Opt.", "L Gastos", "Custo (Kz)", "L Poupados", "Kz Poupados", "Poupanca %"]],
     body: [
       ...stats.combustivel.porMotorista.map((m) => [
         m.nome,
         m.entregasTotal,
         `${m.kmTotal} km`,
-        `${m.kmPoupados} km`,
+        `${m.kmSemOtimizacao} km`,
+        `${m.litrosGastos.toFixed(1)} L`,
+        `${m.kzGastos.toLocaleString("pt-PT")} Kz`,
         `${m.litrosPoupados.toFixed(1)} L`,
         `${m.kzPoupados.toLocaleString("pt-PT")} Kz`,
         `${m.percentagemPoupanca.toFixed(0)}%`,
       ]),
-      // Totals row
       [
         "TOTAL GERAL",
         stats.combustivel.porMotorista.reduce((s, m) => s + m.entregasTotal, 0),
-        `${stats.combustivel.porMotorista.reduce((s, m) => s + m.kmTotal, 0)} km`,
-        `${stats.combustivel.totalKmPoupados.toFixed(1)} km`,
+        `${stats.combustivel.porMotorista.reduce((s, m) => s + m.kmTotal, 0).toFixed(1)} km`,
+        "-",
+        `${stats.combustivel.totalLitrosGastos.toFixed(1)} L`,
+        `${stats.combustivel.totalKzGastos.toLocaleString("pt-PT")} Kz`,
         `${stats.combustivel.totalLitrosPoupados.toFixed(1)} L`,
         `${stats.combustivel.totalKzPoupados.toLocaleString("pt-PT")} Kz`,
         `${stats.combustivel.percentagemMedia.toFixed(0)}%`,
       ],
     ],
-    styles: { fontSize: 8, cellPadding: 2.8, textColor: DARK },
-    headStyles: { fillColor: [226, 232, 240], textColor: DARK, fontStyle: "bold", fontSize: 7.5 },
+    styles: { fontSize: 7, cellPadding: 2.5, textColor: DARK },
+    headStyles: { fillColor: [226, 232, 240], textColor: DARK, fontStyle: "bold", fontSize: 6.5 },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     bodyStyles: { valign: "middle" },
     columnStyles: {
       0: { fontStyle: "bold" },
-      4: { textColor: GREEN },
+      4: { textColor: AMBER },
       5: { textColor: AMBER },
-      6: { textColor: GREEN, fontStyle: "bold" },
+      6: { textColor: GREEN },
+      7: { textColor: GREEN },
+      8: { textColor: GREEN, fontStyle: "bold" },
     },
-    // Bold last row (totals)
     didParseCell(data) {
       if (data.row.index === stats.combustivel.porMotorista.length) {
         data.cell.styles.fontStyle = "bold";
